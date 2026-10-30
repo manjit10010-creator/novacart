@@ -1,0 +1,5 @@
+give managers access so they can create thier own block.
+
+make it more dynamic
+
+create an app version for the ceo.

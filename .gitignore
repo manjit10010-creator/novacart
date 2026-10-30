@@ -1,0 +1,20 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# runtime / generated data
+users.json
+audit_log.csv
+company.db
+orders.csv
+marketing_daily.csv
+inventory.csv
+returns.csv
+tickets.csv
