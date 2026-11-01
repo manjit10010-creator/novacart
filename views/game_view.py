@@ -11,6 +11,7 @@ from sim_engine import (
     get_products,
     get_metrics_history,
     get_decisions,
+    get_daily_costs,
     advance_day,
     record_decision,
 )
@@ -134,6 +135,26 @@ def render(_filters=None):
                 f"${latest.get('lost_revenue', 0):,.2f}",
             )
 
+            with st.expander("Latest day profit and loss"):
+                cost_rows = get_daily_costs(latest["day"])
+
+                if cost_rows:
+                    pnl = pd.DataFrame(cost_rows)[["category", "amount"]]
+                    pnl.columns = ["Cost item", "Amount ($)"]
+
+                    st.dataframe(pnl, hide_index=True)
+
+                    st.write(
+                        f"**Revenue:** ${latest['revenue']:,.2f}  |  "
+                        f"**Total costs:** ${pnl['Amount ($)'].sum():,.2f}  |  "
+                        f"**Profit:** ${latest['profit']:,.2f}"
+                    )
+                else:
+                    st.info(
+                        "No itemised costs for this day "
+                        "(it was simulated before costs were added)."
+                    )
+
     # -------------------------------------------------
     # AI CEO BRIEFING (CEO only)
     # -------------------------------------------------
@@ -175,6 +196,66 @@ def render(_filters=None):
          # -------------------------------------------------
     # INVENTORY PROCUREMENT
     # -------------------------------------------------
+
+    if role in {"CEO", "Customer Support Manager"}:
+        st.divider()
+        st.subheader("Company Settings")
+
+        st.caption(
+            "Ad spend and support staffing change daily costs "
+            "and results from the next simulated day."
+        )
+
+        settings_cols = st.columns(2)
+
+        if role == "CEO":
+            with settings_cols[0]:
+                new_ad_spend = st.number_input(
+                    "Daily ad spend ($)",
+                    min_value=0,
+                    max_value=10000,
+                    value=int(state["marketing_budget"]),
+                    step=50,
+                )
+
+                if st.button("Update ad spend"):
+                    try:
+                        result = record_decision(
+                            actor=user,
+                            decision_type="set_marketing_budget",
+                            value=new_ad_spend,
+                            rationale="Set from Company Settings.",
+                        )
+
+                        st.success(result["effect_summary"])
+                        st.rerun()
+
+                    except Exception as error:
+                        st.error(f"Could not update ad spend: {error}")
+
+        with settings_cols[1]:
+            new_agents = st.number_input(
+                "Active support agents",
+                min_value=1,
+                max_value=56,
+                value=int(state["support_staffing"]),
+                step=1,
+            )
+
+            if st.button("Update support staffing"):
+                try:
+                    result = record_decision(
+                        actor=user,
+                        decision_type="set_support_staffing",
+                        value=new_agents,
+                        rationale="Set from Company Settings.",
+                    )
+
+                    st.success(result["effect_summary"])
+                    st.rerun()
+
+                except Exception as error:
+                    st.error(f"Could not update staffing: {error}")
 
     if role in {"CEO", "Inventory Manager"}:
         st.divider()

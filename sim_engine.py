@@ -14,6 +14,7 @@ It does not import Streamlit.
 """
 
 import csv
+import math
 import random
 from functools import lru_cache
 import sqlite3
@@ -31,6 +32,22 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "company.db"
 INVENTORY_PATH = BASE_DIR / "inventory.csv"
 ORDERS_PATH = BASE_DIR / "orders.csv"
+
+# Daily operating-cost assumptions, scaled to NovaCart's size.
+# Salaries are deliberately scaled down: NovaCart earns about
+# $3,900 a day, so real pay for 200 people would bankrupt it.
+SHIPPING_PER_ORDER = 5.10            # courier + packaging per order
+PAYMENT_FEE_RATE = 0.040             # gateway (~2.5%) + marketplace (~1.5%)
+RETURNS_RATE = 0.064                 # refunds + damaged goods (Finance page: 6.4%)
+PAY_PER_STAFF_DAY = 1.00             # simulated pay per employee per day
+PAY_PER_SUPPORT_AGENT_DAY = 2.00     # per ACTIVE support agent per day
+OVERHEADS_PER_DAY = {
+    "Rent": 50.0,
+    "Cloud & hosting": 25.0,
+    "Software subscriptions": 25.0,
+}
+OVERDRAFT_DAILY_RATE = 0.001         # interest on a negative cash balance
+DEFAULT_AD_SPEND = 200.0             # daily ad spend a new company starts with
 
 
 DEPARTMENT_BY_ROLE = {
@@ -605,6 +622,35 @@ def _migrate_simulation_schema(connection):
                 f"ADD COLUMN {column} {definition}"
             )
 
+    # Itemised daily costs (one row per cost line per day).
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS simulation_daily_costs (
+            day INTEGER NOT NULL,
+            category TEXT NOT NULL,
+            amount REAL NOT NULL,
+            PRIMARY KEY (day, category)
+        )
+        """
+    )
+
+    # The old default ad budget ($1,000) loses money under real costs.
+    # Move it to the new default, but only if nobody chose it on purpose.
+    connection.execute(
+        """
+        UPDATE simulation_state
+        SET marketing_budget = ?
+        WHERE id = 1
+          AND marketing_budget = 1000
+          AND NOT EXISTS (
+              SELECT 1
+              FROM simulation_decisions
+              WHERE decision_type = 'set_marketing_budget'
+          )
+        """,
+        (DEFAULT_AD_SPEND,),
+    )
+
 
 # ---------------------------------------------------------
 # 5. LOAD INVENTORY INTO SIMULATION
@@ -899,6 +945,44 @@ def get_metrics_history(db_path=None):
         connection.close()
 
 
+def get_daily_costs(day=None, db_path=None):
+    """
+    Return itemised daily costs.
+
+    With a day number: that day's cost lines.
+    Without: every day, oldest first.
+    """
+
+    initialize_simulation(db_path)
+
+    connection = _connect(db_path)
+
+    try:
+        if day is None:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM simulation_daily_costs
+                ORDER BY day, rowid
+                """
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM simulation_daily_costs
+                WHERE day = ?
+                ORDER BY rowid
+                """,
+                (day,),
+            ).fetchall()
+
+        return [dict(row) for row in rows]
+
+    finally:
+        connection.close()
+
+
 # ---------------------------------------------------------
 # 10. INTERNAL TASK CREATION
 # ---------------------------------------------------------
@@ -969,6 +1053,54 @@ def _add_task(
 # 11. ADVANCE SIMULATION BY ONE DAY
 # ---------------------------------------------------------
 
+def _marketing_factor(ad_spend):
+    """
+    Demand multiplier from daily ad spend, with diminishing returns.
+
+    About 1.0 at $200 a day. Spending more still adds demand, but
+    each extra dollar adds less, so there is a sensible sweet spot.
+    """
+
+    return max(
+        0.60,
+        min(
+            1.40,
+            0.659 + 0.7 * (1 - math.exp(-ad_spend / 300)),
+        ),
+    )
+
+
+def _daily_payroll(connection, support_agents):
+    """
+    Scaled daily payroll.
+
+    Support is paid per ACTIVE agent (the staffing setting).
+    Every other department is paid per employee on record.
+    """
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT department, COUNT(*) AS headcount
+            FROM employees
+            GROUP BY department
+            """
+        ).fetchall()
+    except sqlite3.Error:
+        rows = []
+
+    other_staff = sum(
+        row["headcount"]
+        for row in rows
+        if row["department"] != "Customer Support"
+    )
+
+    return (
+        other_staff * PAY_PER_STAFF_DAY
+        + support_agents * PAY_PER_SUPPORT_AGENT_DAY
+    )
+
+
 def advance_day(
     actor,
     db_path=None,
@@ -1036,13 +1168,7 @@ def advance_day(
             """
         ).fetchone()[0]
 
-        marketing_factor = max(
-            0.75,
-            min(
-                1.25,
-                1 + (budget - 1000) / 10000,
-            ),
-        )
+        marketing_factor = _marketing_factor(budget)
 
         staffing_factor = max(
             0.75,
@@ -1109,16 +1235,43 @@ def advance_day(
         # About 1.6 units per order in the historical data.
         orders = max(1, round(units_sold_total / 1.6))
 
-        # Temporary flat rate for shipping, fees and ad spend
-        # (about 17.5% of revenue in the historical data).
-        # Step B replaces this with itemised costs.
-        other_costs = revenue * 0.175
+        # Daily operating costs.
+        shipping_cost = orders * SHIPPING_PER_ORDER
+        fee_cost = revenue * PAYMENT_FEE_RATE
+        returns_cost = revenue * RETURNS_RATE
+        ad_spend = budget
+        payroll = _daily_payroll(connection, staffing)
+        overheads = sum(OVERHEADS_PER_DAY.values())
+
+        operating_costs = (
+            shipping_cost
+            + fee_cost
+            + returns_cost
+            + ad_spend
+            + payroll
+            + overheads
+        )
+
+        # Inventory is paid for when it is purchased, so COGS reduces
+        # profit but must not reduce cash a second time.
+        cash = (
+            float(state["cash_balance"])
+            + revenue
+            - operating_costs
+        )
+
+        # Overdraft: a negative balance is charged daily interest.
+        interest = 0.0
+
+        if cash < 0:
+            interest = -cash * OVERDRAFT_DAILY_RATE
+            cash -= interest
 
         profit = (
             revenue
             - cogs
-            - other_costs
-            - max(0, budget - 1000) * 0.18
+            - operating_costs
+            - interest
         )
 
         tickets = max(
@@ -1141,13 +1294,6 @@ def advance_day(
                 + (staffing_factor - 1) * 0.25
                 + rng.uniform(-0.08, 0.08),
             ),
-        )
-
-        # Cash is persistent and changes each simulated day.
-        cash = (
-            float(state["cash_balance"])
-            + profit
-            - max(0, budget - 1000)
         )
 
         now = datetime.now().isoformat(
@@ -1193,6 +1339,34 @@ def advance_day(
                 round(lost_revenue, 2),
                 round(cogs, 2),
             ),
+        )
+
+        # Store the itemised daily costs.
+        cost_lines = [
+            ("COGS", cogs),
+            ("Shipping & packaging", shipping_cost),
+            ("Payment & platform fees", fee_cost),
+            ("Returns & damaged goods", returns_cost),
+            ("Advertising", ad_spend),
+            ("Payroll", payroll),
+        ]
+
+        cost_lines += list(OVERHEADS_PER_DAY.items())
+        cost_lines.append(("Overdraft interest", interest))
+
+        connection.executemany(
+            """
+            INSERT INTO simulation_daily_costs (
+                day,
+                category,
+                amount
+            )
+            VALUES (?, ?, ?)
+            """,
+            [
+                (day, name, round(amount, 2))
+                for name, amount in cost_lines
+            ],
         )
 
         # Update the persistent company state.
