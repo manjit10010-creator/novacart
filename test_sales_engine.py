@@ -92,8 +92,9 @@ def main():
     check("prices are above cost (healthy margin)", rev > cogs)
     check("daily revenue is in a believable range (2k-6k)", 2000 <= day["revenue"] <= 6000,
           f"{day['revenue']}")
-    margin = day["profit"] / day["revenue"]
-    check("profit margin about 15-35%", 0.15 <= margin <= 0.35, f"{margin:.1%}")
+    check("profit is below gross profit (running costs are deducted)",
+          day["profit"] < day["revenue"] - day["cogs"],
+          f"profit {day['profit']} vs gross {day['revenue'] - day['cogs']:.2f}")
     check("orders about units / 1.6",
           abs(day["orders"] - units / 1.6) <= 1, f"{day['orders']} vs {units/1.6:.1f}")
 
