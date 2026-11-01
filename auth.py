@@ -26,11 +26,15 @@ SELF_SIGNUP_ROLES = [
 
 # Which dashboards each role may open
 ROLE_VIEWS = {
-    "CEO": ["Executive Overview", "Marketing", "Finance", "Inventory", "Customer Support", "Admin & Audit"],
-    "Marketing Manager": ["Marketing"],
-    "Finance Manager": ["Finance"],
-    "Inventory Manager": ["Inventory"],
-    "Customer Support Manager": ["Customer Support"],
+    "CEO": [
+        "Executive Overview", "Marketing", "Finance",
+        "Inventory", "Customer Support", "Workforce",
+        "Admin & Audit", "Business Simulation"
+    ],
+    "Marketing Manager": ["Marketing", "My Team", "Business Simulation"],
+    "Finance Manager": ["Finance", "My Team", "Business Simulation"],
+    "Inventory Manager": ["Inventory", "My Team", "Business Simulation"],
+    "Customer Support Manager": ["Customer Support", "My Team", "Business Simulation"],
 }
 
 

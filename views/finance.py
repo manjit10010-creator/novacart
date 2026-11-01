@@ -1,3 +1,6 @@
+import pandas as pd
+import plotly.express as px
+import streamlit as st
 import plotly.express as px
 import streamlit as st
 
@@ -37,7 +40,48 @@ def fin_totals(data, rets) -> dict:
         cost=data["total_cost"].sum(), profit=profit, after=after,
         margin=after / net_sales * 100 if net_sales else 0,
     )
+def render_simulation_tab():
+    from sim_engine import get_metrics_history, get_state
 
+    state = get_state()
+    history = pd.DataFrame(get_metrics_history())
+
+    st.caption(
+        "Live results from the Business Simulation. These are separate from "
+        "the historical order data in the other tabs and are not affected "
+        "by the date filters."
+    )
+
+    if history.empty:
+        st.info(
+            "The simulation has not advanced yet. Advance a day from "
+            "Business Simulation to see results here."
+        )
+        return
+
+    k = st.columns(4)
+    k[0].metric("Simulation day", f"{state['current_day']}")
+    k[1].metric("Company cash", f"${state['cash_balance']:,.0f}")
+    k[2].metric("Cumulative revenue", f"${state['cumulative_revenue']:,.0f}")
+    k[3].metric("Cumulative profit", f"${state['cumulative_profit']:,.0f}")
+
+    st.caption(
+        "Company cash also reflects marketing spend above the base budget "
+        "and restock purchases, so it is not just cumulative profit."
+    )
+
+    fig = px.line(history, x="simulated_date", y=["revenue", "profit"], markers=True)
+    fig.update_layout(xaxis_title=None, yaxis_title="$ per day", legend_title=None)
+    st.plotly_chart(fig)
+
+    st.markdown("**Daily results**")
+    st.dataframe(
+        history[
+            ["day", "simulated_date", "orders", "revenue", "profit",
+             "tickets", "csat", "stock_alerts"]
+        ].sort_values("day", ascending=False),
+        hide_index=True,
+    )
 
 def render(f: Filters):
     df, returns = load_orders(), load_returns()
@@ -67,7 +111,9 @@ def render(f: Filters):
     r2[2].metric("Profit after refunds", f"${c['after']:,.0f}", pct_delta(c["after"], p["after"]))
     r2[3].metric("Margin after refunds", f"{c['margin']:.1f}%")
 
-    tab_over, tab_country, tab_product = st.tabs(["Overview", "Countries", "Products"])
+    tab_over, tab_country, tab_product, tab_sim = st.tabs(
+        ["Overview", "Countries", "Products", "Live simulation"]
+    )
 
     with tab_over:
         left, right = st.columns(2)
@@ -144,3 +190,6 @@ def render(f: Filters):
         with worst:
             st.markdown("**Bottom 10 products by profit**")
             st.dataframe(prod_perf.tail(10).iloc[::-1], hide_index=True, column_config=TABLE_CONFIG)
+            
+    with tab_sim:
+        render_simulation_tab()

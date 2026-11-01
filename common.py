@@ -20,7 +20,26 @@ def load_marketing() -> pd.DataFrame:
 
 
 def load_inventory() -> pd.DataFrame:
-    return load_dataset("inventory")
+    inv = load_dataset("inventory")
+
+    # Overlay live stock from the Business Simulation, if it exists.
+    try:
+        from sim_engine import get_products
+
+        sim = pd.DataFrame(get_products())
+        if not sim.empty and not inv.empty:
+            live_stock = sim.set_index("product")["stock"]
+            inv = inv.copy()
+            inv["stock"] = (
+                inv["product"].map(live_stock).fillna(inv["stock"]).astype(int)
+            )
+            sold_per_day = inv["units_sold_30d"].replace(0, np.nan) / 30
+            inv["days_of_stock"] = (inv["stock"] / sold_per_day).round(1)
+    except Exception:
+        # If the simulation isn't available, fall back to the CSV snapshot.
+        pass
+
+    return inv
 
 
 def load_returns() -> pd.DataFrame:

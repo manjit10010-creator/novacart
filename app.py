@@ -3,7 +3,7 @@ import streamlit as st
 from audit import log_event
 from auth import allowed_views, logout, require_login
 from common import load_orders, sidebar_filters
-from views import admin, ceo, finance, inventory, marketing, support
+from views import admin, ceo, finance, game_view, inventory, marketing, support, team, workforce
 
 st.set_page_config(page_title="NovaCart KPI Dashboard", page_icon="📈", layout="wide")
 
@@ -11,13 +11,21 @@ user = require_login()  # shows the login screen and stops until signed in
 
 VIEWS = {
     "Executive Overview": ceo.render,
+    "Business Simulation": game_view.render,
     "Marketing": marketing.render,
     "Finance": finance.render,
     "Inventory": inventory.render,
     "Customer Support": support.render,
+    "Workforce": workforce.render,
+    "My Team": team.render,
     "Admin & Audit": admin.render,
 }
-VIEWS_WITHOUT_FILTERS = {"Admin & Audit"}
+VIEWS_WITHOUT_FILTERS = {
+    "Admin & Audit",
+    "Workforce",
+    "My Team",
+    "Business Simulation",
+}
 
 st.sidebar.title("🛒 NovaCart")
 st.sidebar.markdown(f"**{user['name']}**")

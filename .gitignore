@@ -18,3 +18,7 @@ marketing_daily.csv
 inventory.csv
 returns.csv
 tickets.csv
+
+# backups
+*.db
+*.bak*
