@@ -22,3 +22,7 @@ tickets.csv
 # backups
 *.db
 *.bak*
+
+# secrets
+.streamlit/secrets.toml
+.env

@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+from views.ai_briefing_view import render_ai_briefing
+
 from sim_engine import (
     get_state,
     get_tasks,
@@ -131,6 +133,12 @@ def render(_filters=None):
                 "Lost Revenue",
                 f"${latest.get('lost_revenue', 0):,.2f}",
             )
+
+    # -------------------------------------------------
+    # AI CEO BRIEFING (CEO only)
+    # -------------------------------------------------
+
+    render_ai_briefing(user)
 
     # -------------------------------------------------
     # CEO SIMULATION CONTROL
