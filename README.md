@@ -1,5 +1,8 @@
 # NovaCart: KPI Dashboards and a Business Simulation
 
+**Live demo: **https://novacart-demo.streamlit.app/
+Log in as `ceo@novacart.example` / `Demo@CEO2026` (all demo data is synthetic).
+
 A Streamlit app for a fictional e-commerce company. It has two parts:
 
 1. **Role-based KPI dashboards** for the CEO, Marketing, Finance, Inventory and Customer Support, plus workforce and team views.
