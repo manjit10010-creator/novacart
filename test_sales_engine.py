@@ -154,6 +154,12 @@ def main():
 
     # ------------------------------------------------------------
     print("\nTEST 5: migration on an older database")
+    if not (PROJECT / "company_backup_before_procurement.db").exists():
+        print("  SKIP  old backup database not found (it is not part of a fresh clone)")
+        print(f"\nRESULT: {passed} passed, {failed} failed")
+        shutil.rmtree(folder, ignore_errors=True)
+        sys.exit(1 if failed else 0)
+
     old = fresh(folder, "old.db", "company_backup_before_procurement.db")
     sim.initialize_simulation(old)
     sim.initialize_simulation(old)  # second run must be harmless

@@ -1,11 +1,30 @@
 import streamlit as st
 
 from audit import log_event
+from bootstrap import build_if_empty
 from auth import allowed_views, logout, require_login
 from common import load_orders, sidebar_filters
 from views import admin, ceo, finance, game_view, inventory, marketing, support, team, workforce
 
 st.set_page_config(page_title="NovaCart KPI Dashboard", page_icon="📈", layout="wide")
+
+
+
+@st.cache_resource(show_spinner="First start: building the demo data (about 10 seconds)...")
+def prepare_data():
+    return build_if_empty()
+
+
+_data_status = prepare_data()
+if _data_status == "partial":
+    st.error(
+        "Some data files are missing. Run `uv run python setup_demo.py --force` "
+        "to rebuild everything (old files are moved to a backup folder)."
+    )
+    st.stop()
+if _data_status == "failed":
+    st.error("The demo data could not be built. Check the app logs.")
+    st.stop()
 
 user = require_login()  # shows the login screen and stops until signed in
 

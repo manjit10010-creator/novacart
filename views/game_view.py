@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 
 from views.ai_briefing_view import render_ai_briefing
+from views.demo_tools_view import render_demo_tools
 
 from sim_engine import (
     get_state,
@@ -160,6 +161,7 @@ def render(_filters=None):
     # -------------------------------------------------
 
     render_ai_briefing(user)
+    render_demo_tools(user)
 
     # -------------------------------------------------
     # CEO SIMULATION CONTROL

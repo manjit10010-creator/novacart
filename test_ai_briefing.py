@@ -44,6 +44,11 @@ def main():
     db = str(folder / "test.db")
     shutil.copy(PROJECT / "company.db", db)
 
+    # A brand-new database is at Day 0. Make sure the copy has one real day.
+    import sim_engine
+    if not sim_engine.get_metrics_history(db):
+        sim_engine.advance_day({"user_id": "USR-001", "role": "CEO"}, db_path=db)
+
     print("Facts")
     facts = ab.build_facts(db)
     check("facts have day, cash, latest day, stock",
